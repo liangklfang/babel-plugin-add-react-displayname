@@ -1,101 +1,32 @@
 module.exports = transform;
-var pathMod = require('path')
-//detail:https://github.com/thejameskyle/babel-handbook/blob/master/translations/zh-Hans/plugin-handbook.md
+var pathMod = require('path');
+const util = require('util');
+const t = require('babel-types');
+const lifeCycleMthods = require('./lifeCycleMethod');
+const lifeMethods = {
+  //MethodDefinition
+  ClassMethod(path) {
+     if(lifeCycleMthods.indexOf(path.node.key.name)!=-1){
+      //不需要经过value访问body，直接body就行
+        const originalCodeBlockStatementEachMethod = path.node.body;
+        const catchClause = t.catchClause(t.identifier("e"), t.BlockStatement([],[]));
+        const tryBlock = t.tryStatement(originalCodeBlockStatementEachMethod, catchClause, null);
+        path.replaceWith(
+          tryBlock
+        );
+     }
+  }
+};
+
 function transform (babel) {
   return {
     visitor: {
-      //Class声明，如下:
-      //  class Component3a extends React.Component {
-      //   render() {
-      //     return React.createElement('div', null);
-      //   }
-      // };
       ClassDeclaration: function (path, state) {
-        //state对象查看dev/state.js
         if (classHasRenderMethod(path)) {
-          //ClassDeclaration这个node的id为Identifier对象，其name就是我们class的名称
-          setDisplayNameAfter(path, path.node.id, babel.types)
-          //在我们的path下寻找blockStatement，然后在其后面添加一个displayName属性
-        }
-      },
-      //函数声明,用于无状态组件的声明
-      FunctionDeclaration: function (path, state) {
-        if (doesReturnJSX(path.node.body) || (path.node.id && path.node.id.name &&
-                                              isKnownComponent(path.node.id.name, state.opts.knownComponents))) {
-          var displayName
-        // export default function HelloMessage(props) {
-        //   return (<div>
-        //             say hello
-        //           </div>)
-        // }
-        // 其中我们的Function Declaration上面的Node节点类型为ExportDefaultDeclaration
-        // 注意：很显然FunctionDeclaration的上层节点一般都是ExportDefaultDeclaration
-          if (path.parentPath.node.type === 'ExportDefaultDeclaration') {
-            //这里表示导出的是匿名函数
-            if (path.node.id == null) {
-              // An anonymous function declaration in export default declaration.
-              // Transform `export default function () { ... }`
-              // to `var _uid1 = function () { .. }; export default __uid;`
-              // then add displayName to _uid1
-              var extension = pathMod.extname(state.file.opts.filename)
-
-              //输出的文件后缀
-               //path.extname('index.html')
-              // Returns: '.html'
-              var name = pathMod.basename(state.file.opts.filename, extension)
-               //name="unknown"
-              //输出的文件的名称
-              //path.basename('/foo/bar/baz/asdf/quux.html')
-              // Returns: 'quux.html'
-              //path.basename('/foo/bar/baz/asdf/quux.html', '.html')
-              // Returns: 'quux'
-              var id = path.scope.generateUidIdentifier("uid");
-              //在我们的FunctionDeclaration，即函数声明的作用域之内产生一个uid,即Identifier对象
-              path.node.id = id
-              //为我们函数设置一个uid作为Identifier对象
-              displayName = name
-            }
-            setDisplayNameAfter(path, path.node.id, babel.types, displayName)
-            //path为FunctionDeclaration，id为我们的产生的identifier对象，displayName为"unknown"
-            //即从FunctionDeclaration往上找，找到一个path的isBlock返回为true即可，
-            //所以是在函数后面添加了displayName
-          }else if(path.parentPath.node.type === 'Program' || path.parentPath.node.type == 'ExportNamedDeclaration') {
-            //即如果没有导出(parentPath.node.type为Program)或者通过export而不是export default导出了对象
-            //export  function Test(props) {
-            //   return (<div>
-            //             say hello
-            //           </div>)
-            // }
-            setDisplayNameAfter(path, path.node.id, babel.types, displayName)
-            //所以相当于在export或者没有导出的情况下也要添加displayName。我们的path就是函数本身
-            //查找父级元素isBlock返回true返回添加displayName即可
-          }
-        }
-      },
-      //    var func = function(agr1,arg2){
-      //    return (<div>hello world</div>)
-      // }
-      FunctionExpression: function (path, state) {
-         console.log('hub---->',path.hub);
-
-        if(shouldSetDisplayNameForFuncExpr(path, state.opts.knownComponents)) {
-          var id = findCandidateNameForExpression(path)
-          //其中Identifier就是我们这里的func变量，所以我们就是在函数表达式后面添加我们的displayName属
-          if (id) {
-            setDisplayNameAfter(path, id, babel.types)
-          }
-        }
-      },
-      //箭头函数表达式
-      //const Username = ({ username }) => <p>The logged in user is: {username}</p>
-      //https://javascriptplayground.com/blog/2017/03/functional-stateless-components-react/
-      ArrowFunctionExpression: function (path, state) {
-        if(shouldSetDisplayNameForFuncExpr(path, state.opts.knownComponents)) {
-          var id = findCandidateNameForExpression(path)
-          //创建一个Identifier对象
-          if (id) {
-            setDisplayNameAfter(path, id, babel.types)
-          }
+          //那么我会在他的外面包裹一层try..catch
+          const classBody = path.node.body.body;
+          //此时classBody会是一个method数组
+          path.traverse(lifeMethods, {  });
         }
       }
     }
